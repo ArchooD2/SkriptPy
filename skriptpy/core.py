@@ -1,39 +1,415 @@
 
---- a/skriptpy/core.py
-+++ b/skriptpy/core.py
-@@ -2 +2
--from typing import List, Callable
-+from typing import List, Callable, Optional, Any, Union, TypeVar, Type, cast, Dict
-@@ -395 +395
--def command(name):
-+def command(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
-@@ -410 +410
--def event(name, condition=None):
-+def event(name: str, condition: Optional[str] = None) -> Callable[[Callable[[], None]], Callable[[], None]]:
-@@ -430 +430
--def set_local(name, value):
-+def set_local(name: str, value: Any) -> None:
-@@ -440 +440
--def get_local(name):
-+def get_local(name: str) -> GetLocalVar:
-@@ -452 +452
--def function(name, *params):
-+def function(name: str, *params: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
-@@ -473 +473
--def send(msg):
-+def send(msg: Any) -> None:
-@@ -482 +482
--def broadcast(msg):
-+def broadcast(msg: Any) -> None:
-@@ -491 +491
--def teleport(entity, location):
-+def teleport(entity: str, location: str) -> None:
-@@ -501 +501
--def set_var(name, value):
-+def set_var(name: str, value: Any) -> None:
-@@ -511 +511
--def get_var(name):
-+def get_var(name: str) -> GetVar:
+from typing import List, Callable, Optional, Any, Union, TypeVar, Type, cast, Dict
+
+def command(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+
+def event(name: str, condition: Optional[str] = None) -> Callable[[Callable[[], None]], Callable[[], None]]:
+
+def set_local(name: str, value: Any) -> None:
+
+def get_local(name: str) -> GetLocalVar:
+
+def function(name: str, *params: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+
+def send(msg: Any) -> None:
+
+def broadcast(msg: Any) -> None:
+
+def teleport(entity: str, location: str) -> None:
+
+def set_var(name: str, value: Any) -> None:
+
+def get_var(name: str) -> GetVar:
+
+        self.name = name
+
+    def to_skript(self, indent=0):
+        """
+        Returns the Skript code for accessing a persistent variable keyed by the player's UUID.
+        
+        Args:
+            indent: Indentation level (unused).
+        
+        Returns:
+            Skript code string for retrieving the variable.
+        """
+        return f'{{{self.name}::%player\'s uuid%}}'
+
+class IfBlock(Action):
+    def __init__(self, condition):
+        """
+        Initializes an IfBlock with a condition and an empty body for nested actions.
+        
+        Args:
+            condition: The condition string to evaluate for the if block.
+        """
+        self.condition = condition
+        self.body = []
+
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code for an if conditional block with proper indentation.
+        
+        Args:
+            indent: The number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript representation of the if block and its nested actions.
+        """
+        lines = [" " * indent + f'if {self.condition}:']
+        for action in self.body:
+            lines.append(action.to_skript(indent + 4))
+        return "\n".join(lines)
+
+class ElseBlock(Action):
+    def __init__(self):
+        """
+        Initializes the object with an empty body for storing child actions or nodes.
+        """
+        self.body = []
+
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code for an else block with proper indentation.
+        
+        Args:
+            indent: Number of spaces to indent the block.
+        
+        Returns:
+            A string containing the Skript representation of the else block and its actions.
+        """
+        lines = [" " * indent + 'else:']
+        for action in self.body:
+            lines.append(action.to_skript(indent + 4))
+        return "\n".join(lines)
+
+class LoopTimes(Action):
+    def __init__(self, times):
+        """
+        Initializes a loop block that repeats a specified number of times.
+        
+        Args:
+            times: The number of iterations for the loop.
+        """
+        self.times = times
+        self.body = []
+
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code for a loop that repeats a set of actions a specified number of times.
+        
+        Args:
+            indent: Number of spaces to indent each line of the generated code.
+        
+        Returns:
+            A string containing the Skript code for the loop block with proper indentation.
+        """
+        lines = [" " * indent + f'loop {self.times} times:']
+        for action in self.body:
+            lines.append(action.to_skript(indent + 4))
+        return "\n".join(lines)
+
+class LoopPlayers(Action):
+    def __init__(self):
+        """
+        Initializes the object with an empty body for storing child actions or nodes.
+        """
+        self.body = []
+
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code for looping over all players and executing the contained actions.
+        
+        Args:
+            indent: Number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript code for the loop block with nested actions.
+        """
+        lines = [" " * indent + f'loop all players:']
+        for action in self.body:
+            lines.append(action.to_skript(indent + 4))
+        return "\n".join(lines)
+
+class ScriptContext:
+    def __init__(self):
+        """
+        Initializes the script context with empty stacks for managing nesting, commands, and events.
+        """
+        self.stack = []
+        self.commands = []
+        self.events = []
+
+    def push(self, ctx):
+        """
+        Pushes a context object onto the context stack.
+        
+        Args:
+            ctx: The context object to be added to the stack.
+        """
+        self.stack.append(ctx)
+
+    def pop(self):
+        """
+        Removes and returns the top context from the context stack.
+        
+        Returns:
+            The most recently pushed context object.
+        """
+        return self.stack.pop()
+
+    def current(self):
+        """
+        Returns the current context from the top of the context stack, or None if the stack is empty.
+        """
+        return self.stack[-1] if self.stack else None
+
+ctx = ScriptContext()
+
+class Command(Node):
+    def __init__(self, name):
+        """
+        Initializes a command with the given name and an empty list of actions.
+        
+        Args:
+            name: The name of the command to define.
+        """
+        self.name = name
+        self.actions = []
+
+    def to_skript(self):
+        """
+        Generates the Skript code representation of the command, including its trigger and actions.
+        
+        Returns:
+            A string containing the formatted Skript code for the command.
+        """
+        lines = [f'command /{self.name}:', '    trigger:']
+        for a in self.actions:
+            lines.append(a.to_skript(8))
+        return "\n".join(lines)
+
+class Send(Action):
+    def __init__(self, message):
+        """
+        Initializes the action with the specified message.
+        
+        Args:
+            message: The message to be used by this action.
+        """
+        self.message = message
+
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code to send a message to a player.
+        
+        Args:
+            indent: Number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript code for sending the message.
+        """
+        content = self.message if isinstance(self.message, str) else str(self.message)
+        return " " * indent + f'send "{content}" to player'
+
+class Event(Node):
+    def __init__(self, name, condition=None):
+        """
+        Initializes an event handler with a name, optional condition, and an empty list of actions.
+        
+        Args:
+            name: The name of the event to handle.
+            condition: An optional condition string for the event trigger.
+        """
+        self.name = name
+        self.condition = condition
+        self.actions = []
+
+    def to_skript(self):
+        """
+        Generates Skript code for an event handler, including its condition and actions.
+        
+        Returns:
+            A string containing the formatted Skript code for the event.
+        """
+        header = f'on {self.name}:'
+        lines = [header]
+        if self.condition:
+            lines.append("    if " + self.condition + ":")
+            for a in self.actions:
+                lines.append(a.to_skript(8))
+        else:
+            for a in self.actions:
+                lines.append(a.to_skript(4))
+        return "\n".join(lines)
+
+class Function(Node):
+    def __init__(self, name, params):
+        """
+        Initializes a function definition node with a name, parameters, and an empty action list.
+        
+        Args:
+            name: The name of the function.
+            params: A list of parameter names for the function.
+        """
+        self.name = name
+        self.params = params
+        self.actions = []
+
+    def to_skript(self):
+        """
+        Generates the Skript code representation of the function definition.
+        
+        Returns:
+            A string containing the Skript code for the function, including its parameters and indented body actions.
+        """
+        lines = [f'function {self.name}({", ".join(self.params)}):']
+        for action in self.actions:
+            lines.append(action.to_skript(4))
+        return "\n".join(lines)
+
+class SetLocalVar(Action):
+    def __init__(self, name, value):
+        """
+        Initializes the action with a variable name and value.
+        
+        Args:
+            name: The name of the variable to set.
+            value: The value to assign to the variable.
+        """
+        self.name = name
+        self.value = value
+
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code to set a local variable to a specified value.
+        
+        Args:
+            indent: Number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript statement for setting a local variable.
+        """
+        return " " * indent + f"set {{_{self.name}}} to {self.value}"
+
+class GetLocalVar(Action):
+    def __init__(self, name):
+        """
+        Initializes the instance with the given name.
+        
+        Args:
+            name: The name to assign to the instance.
+        """
+        self.name = name
+
+    def to_skript(self, indent=0):
+        """
+        Returns a Skript code representation of the variable retrieval.
+        
+        Args:
+            indent: Indentation level for formatting (unused).
+        
+        Returns:
+            The Skript code string for accessing the variable.
+        """
+        return f"{{_{self.name}}}"
+
+# DSL API
+def command(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+    """
+    Decorator to define a Skript command with the given name.
+    
+    The decorated function should contain DSL statements that specify the command's actions.
+    """
+    def decorator(func):
+        cmd = Command(name)
+        ctx.commands.append(cmd)
+        ctx.push(cmd)
+        func()
+        ctx.pop()
+        return func
+    return decorator
+
+def event(name: str, condition: Optional[str] = None) -> Callable[[Callable[[], None]], Callable[[], None]]:
+    """
+    Decorator to define a Skript event handler with optional condition.
+    
+    Args:
+        name: The name of the Skript event to handle.
+        condition: An optional condition string for the event trigger.
+    
+    Returns:
+        A decorator that registers the decorated function as the event's body.
+    """
+    def decorator(func):
+        evt = Event(name, condition=condition)
+        ctx.events.append(evt)
+        ctx.push(evt)
+        func()
+        ctx.pop()
+        return func
+    return decorator
+
+def set_local(name: str, value: Any) -> None:
+    """
+    Sets a local variable to the specified value in the current script context.
+    
+    Args:
+        name: The name of the local variable.
+        value: The value to assign to the local variable.
+    """
+    ctx.current().actions.append(SetLocalVar(name, value))
+
+def get_local(name: str) -> GetLocalVar:
+    """
+    Returns a node representing retrieval of a local variable by name.
+    
+    Args:
+        name: The name of the local variable to retrieve.
+    
+    Returns:
+        A GetLocalVar instance for use in Skript code generation.
+    """
+    return GetLocalVar(name)
+
+def function(name: str, *params: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+    """
+    Decorator to define a Skript function with the given name and parameters.
+    
+    Adds a function definition to the script context, executes the decorated function
+    to populate its body with actions, and registers it for inclusion in the generated
+    Skript code.
+    
+    Args:
+        name: The name of the Skript function.
+        *params: Parameter names for the function.
+    """
+    def decorator(func):
+        fn = Function(name, params)
+        ctx.commands.append(fn)  # Reuse the same storage or make `ctx.functions`
+        ctx.push(fn)
+        func()
+        ctx.pop()
+        return func
+    return decorator
+
+def send(msg: Any) -> None:
+    """
+    Adds a send message action to the current script context.
+    
+    Args:
+        msg: The message to send to the player.
+    """
+    ctx.current().actions.append(Send(msg))
+
+def broadcast(msg: Any) -> None:
+    """
+    Adds a broadcast action with the specified message to the current script context.
+    
+    Args:
+        msg: The message to broadcast to all players.
+    """
+    ctx.current().actions.append(Broadcast(msg))
 
 def teleport(entity: str, location: str) -> None:
     """
@@ -68,6 +444,8 @@ def get_var(name: str) -> GetVar:
     return GetVar(name)
 
 player = "player"
+
+
 def If(condition):
     """
     Context manager for creating an if block with the specified condition.
