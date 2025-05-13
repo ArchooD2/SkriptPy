@@ -1,26 +1,103 @@
+from contextlib import contextmanager
+from typing import List, Callable
 
-from typing import List, Callable, Optional, Any, Union, TypeVar, Type, cast, Dict
+class Node:
+    def to_skript(self, indent=0):
+        """
+        Serializes the node into Skript code.
+        
+        Args:
+            indent: The indentation level for the generated Skript code.
+        
+        Returns:
+            A string containing the Skript code representation of the node.
+        
+        Raises:
+            NotImplementedError: If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError
 
-def command(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+class Action(Node):
+    pass
 
-def event(name: str, condition: Optional[str] = None) -> Callable[[Callable[[], None]], Callable[[], None]]:
+class Broadcast(Action):
+    def __init__(self, message):
+        """
+        Initializes the action with the specified message.
+        
+        Args:
+            message: The message to be used by the action.
+        """
+        self.message = message
 
-def set_local(name: str, value: Any) -> None:
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code for broadcasting a message.
+        
+        Args:
+            indent: Number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript broadcast statement with proper indentation.
+        """
+        return " " * indent + f'broadcast "{self.message}"'
 
-def get_local(name: str) -> GetLocalVar:
+class Teleport(Action):
+    def __init__(self, entity, location):
+        """
+        Initializes a Teleport action with the specified entity and destination location.
+        
+        Args:
+            entity: The entity to teleport.
+            location: The target location to teleport the entity to.
+        """
+        self.entity = entity
+        self.location = location
 
-def function(name: str, *params: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code for teleporting an entity to a specified location.
+        
+        Args:
+            indent: Number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript command for teleporting the entity.
+        """
+        return " " * indent + f'teleport {self.entity} to {self.location}'
 
-def send(msg: Any) -> None:
+class SetVar(Action):
+    def __init__(self, name, value):
+        """
+        Initializes an action to set a local variable with the specified name and value.
+        
+        Args:
+            name: The name of the local variable to set.
+            value: The value to assign to the local variable.
+        """
+        self.name = name
+        self.value = value
 
-def broadcast(msg: Any) -> None:
+    def to_skript(self, indent=0):
+        """
+        Generates Skript code to set a persistent variable for a player by UUID.
+        
+        Args:
+            indent: Number of spaces to indent the generated code.
+        
+        Returns:
+            A string containing the Skript code for setting the variable.
+        """
+        return " " * indent + f'set {{{self.name}::%player\'s uuid%}} to {self.value}'
 
-def teleport(entity: str, location: str) -> None:
-
-def set_var(name: str, value: Any) -> None:
-
-def get_var(name: str) -> GetVar:
-
+class GetVar(Action):
+    def __init__(self, name):
+        """
+        Initializes the instance with the given name.
+        
+        Args:
+            name: The name to assign to the instance.
+        """
         self.name = name
 
     def to_skript(self, indent=0):
@@ -89,7 +166,7 @@ class LoopTimes(Action):
         Initializes a loop block that repeats a specified number of times.
         
         Args:
-            times: The number of iterations for the loop.
+        	times: The number of iterations for the loop.
         """
         self.times = times
         self.body = []
@@ -145,7 +222,7 @@ class ScriptContext:
         Pushes a context object onto the context stack.
         
         Args:
-            ctx: The context object to be added to the stack.
+        	ctx: The context object to be added to the stack.
         """
         self.stack.append(ctx)
 
@@ -315,7 +392,7 @@ class GetLocalVar(Action):
         return f"{{_{self.name}}}"
 
 # DSL API
-def command(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+def command(name):
     """
     Decorator to define a Skript command with the given name.
     
@@ -330,7 +407,7 @@ def command(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
         return func
     return decorator
 
-def event(name: str, condition: Optional[str] = None) -> Callable[[Callable[[], None]], Callable[[], None]]:
+def event(name, condition=None):
     """
     Decorator to define a Skript event handler with optional condition.
     
@@ -350,17 +427,17 @@ def event(name: str, condition: Optional[str] = None) -> Callable[[Callable[[], 
         return func
     return decorator
 
-def set_local(name: str, value: Any) -> None:
+def set_local(name, value):
     """
     Sets a local variable to the specified value in the current script context.
     
     Args:
-        name: The name of the local variable.
-        value: The value to assign to the local variable.
+    	name: The name of the local variable.
+    	value: The value to assign to the local variable.
     """
     ctx.current().actions.append(SetLocalVar(name, value))
 
-def get_local(name: str) -> GetLocalVar:
+def get_local(name):
     """
     Returns a node representing retrieval of a local variable by name.
     
@@ -372,7 +449,7 @@ def get_local(name: str) -> GetLocalVar:
     """
     return GetLocalVar(name)
 
-def function(name: str, *params: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+def function(name, *params):
     """
     Decorator to define a Skript function with the given name and parameters.
     
@@ -393,7 +470,7 @@ def function(name: str, *params: str) -> Callable[[Callable[[], None]], Callable
         return func
     return decorator
 
-def send(msg: Any) -> None:
+def send(msg):
     """
     Adds a send message action to the current script context.
     
@@ -402,7 +479,7 @@ def send(msg: Any) -> None:
     """
     ctx.current().actions.append(Send(msg))
 
-def broadcast(msg: Any) -> None:
+def broadcast(msg):
     """
     Adds a broadcast action with the specified message to the current script context.
     
@@ -411,7 +488,7 @@ def broadcast(msg: Any) -> None:
     """
     ctx.current().actions.append(Broadcast(msg))
 
-def teleport(entity: str, location: str) -> None:
+def teleport(entity, location):
     """
     Adds a teleport action for the specified entity to the given location in the current script context.
     
@@ -421,7 +498,7 @@ def teleport(entity: str, location: str) -> None:
     """
     ctx.current().actions.append(Teleport(entity, location))
 
-def set_var(name: str, value: Any) -> None:
+def set_var(name, value):
     """
     Adds an action to set a persistent variable keyed by player UUID to the specified value.
     
@@ -431,7 +508,7 @@ def set_var(name: str, value: Any) -> None:
     """
     ctx.current().actions.append(SetVar(name, value))
 
-def get_var(name: str) -> GetVar:
+def get_var(name):
     """
     Returns a node representing retrieval of a persistent variable by name.
     
@@ -445,7 +522,7 @@ def get_var(name: str) -> GetVar:
 
 player = "player"
 
-
+@contextmanager
 def If(condition):
     """
     Context manager for creating an if block with the specified condition.
