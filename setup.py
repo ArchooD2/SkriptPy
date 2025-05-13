@@ -20,4 +20,11 @@ setup(
         "Topic :: Software Development :: Code Generators",
     ],
     python_requires=">=3.6",
+    install_requires=[
+        "difflib",
+        "snaparg",
+        "re",
+        "os",
+        "sys",
+    ],
 )
