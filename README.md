@@ -84,7 +84,7 @@ python skriptpy-transpile.py example.sk example_converted.py
 
 ## License
 
-MIT
+MPL2.0
 
 ## Contributing
 
