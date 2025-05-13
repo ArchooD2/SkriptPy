@@ -1,25 +1,15 @@
 import importlib.util
 import sys
 import os
-from skriptpy.core import ctx
 import re
 
+from skriptpy.core import ctx
+from skriptpy import __version__
+
+# SnapArg import
+from snaparg import SnapArgumentParser
 
 def transpile_py_to_sk(input_file: str, output_file: str) -> None:
-    """
-    Transpiles a Python script using skriptpy to a Skript language file.
-
-    Loads the specified Python module, collects commands and events from the skriptpy context,
-    and writes their Skript representations to the output file with a generated header.
-
-    Args:
-        input_file: Path to the Python source file to transpile.
-        output_file: Path where the transpiled Skript code will be written.
-
-    Raises:
-        ImportError: If the Python module cannot be loaded.
-        IOError: If there are issues reading from or writing to files.
-    """
     try:
         spec = importlib.util.spec_from_file_location("script", input_file)
         if spec is None:
@@ -47,24 +37,9 @@ def transpile_py_to_sk(input_file: str, output_file: str) -> None:
 
 
 def transpile_sk_to_py(skript_code: str) -> str:
-    """
-    Transpiles Skript code into equivalent Python code using the skriptpy framework.
-
-    Parses Skript source code line by line, converting recognized constructs such as
-    commands, events, control flow, and actions into Python code with appropriate
-    decorators and context managers. Maintains block structure and context stack
-    based on indentation. Returns the generated Python code as a string.
-
-    Args:
-        skript_code: The Skript source code to transpile.
-
-    Returns:
-        A string containing the transpiled Python code.
-    """
     lines = skript_code.splitlines()
     output = ["from skriptpy.core import *\n"]
     indent_stack = [0]
-    current_block = None
 
     for line in lines:
         stripped = line.strip()
@@ -72,8 +47,7 @@ def transpile_sk_to_py(skript_code: str) -> str:
 
         while indent < indent_stack[-1]:
             indent_stack.pop()
-            if current_block:
-                output.append(" " * indent_stack[-1] + "ctx.pop()")
+            output.append(" " * indent_stack[-1] + "ctx.pop()")
 
         if stripped.startswith("command /"):
             cmd_name = re.findall(r"command /([^:]+):", stripped)[0]
@@ -98,9 +72,7 @@ def transpile_sk_to_py(skript_code: str) -> str:
 
         elif stripped.startswith("teleport "):
             parts = stripped.split()
-            output.append(
-                " " * indent_stack[-1] + f'teleport("{parts[1]}", "{parts[3]}")'
-            )
+            output.append(" " * indent_stack[-1] + f'teleport("{parts[1]}", "{parts[3]}")')
 
         elif stripped.startswith("set {"):
             m = re.match(r"set \{(.+?)::%player's uuid%\} to (.+)", stripped)
@@ -109,9 +81,7 @@ def transpile_sk_to_py(skript_code: str) -> str:
             else:
                 m = re.match(r"set \{_(.+?)\} to (.+)", stripped)
                 if m:
-                    output.append(
-                        " " * indent_stack[-1] + f'set_local("{m[1]}", {m[2]})'
-                    )
+                    output.append(" " * indent_stack[-1] + f'set_local("{m[1]}", {m[2]})')
 
         elif stripped.startswith("if "):
             condition = stripped[3:].rstrip(":")
@@ -119,7 +89,7 @@ def transpile_sk_to_py(skript_code: str) -> str:
             indent_stack.append(indent + 4)
 
         elif stripped.startswith("else:"):
-            output.append(" " * indent_stack[-1] + f"with Else():")
+            output.append(" " * indent_stack[-1] + "with Else():")
             indent_stack.append(indent + 4)
 
         elif stripped.startswith("loop "):
@@ -138,25 +108,17 @@ def transpile_sk_to_py(skript_code: str) -> str:
 
 
 if __name__ == "__main__":
-    import argparse
-    from skriptpy import __version__
-
-    parser = argparse.ArgumentParser(
-        description="SkriptPy transpiler - Convert between Python and Skript files."
+    parser = SnapArgumentParser(
+        description="SkriptPy transpiler - Convert between Python and Skript files.",
+        epilog="Supports both .py to .sk and .sk to .py conversions."
     )
     parser.add_argument("input_file", help="Input file (.py or .sk)")
     parser.add_argument("output_file", help="Output file destination")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
-    )
-    parser.add_argument(
-        "--version", action="version", version=f"SkriptPy v{__version__}"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("--version", action="version", version=f"SkriptPy v{__version__}")
 
     args = parser.parse_args()
-
-    input_file, output_file = args.input_file, args.output_file
-    verbose = args.verbose
+    input_file, output_file, verbose = args.input_file, args.output_file, args.verbose
 
     if not os.path.exists(input_file):
         print(f"Error: Input file '{input_file}' does not exist.")
@@ -165,34 +127,25 @@ if __name__ == "__main__":
     if verbose:
         print(f"Processing {input_file}...")
 
-    if input_file.endswith(".py"):
-        if verbose:
-            print("Transpiling Python to Skript...")
-        transpile_py_to_sk(input_file, output_file)
-        if verbose:
-            print(f"Successfully wrote Skript code to {output_file}")
-    elif input_file.endswith(".sk"):
-        if verbose:
-            print("Transpiling Skript to Python...")
-        try:
+    try:
+        if input_file.endswith(".py"):
+            if verbose:
+                print("Transpiling Python to Skript...")
+            transpile_py_to_sk(input_file, output_file)
+        elif input_file.endswith(".sk"):
+            if verbose:
+                print("Transpiling Skript to Python...")
             with open(input_file, "r") as f:
                 skript_code = f.read()
             python_code = transpile_sk_to_py(skript_code)
             with open(output_file, "w") as f:
                 f.write(python_code)
-            if verbose:
-                print(f"Successfully wrote Python code to {output_file}")
-        except IOError as e:
-            print(f"Error reading/writing files: {e}")
+        else:
+            print(f"Error: Unsupported input file type '{os.path.splitext(input_file)[1]}'. Must be .py or .sk")
             sys.exit(1)
-        except ValueError as e:
-            print(f"Error parsing Skript code: {e}")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Unexpected error during transpilation: {e}")
-            sys.exit(1)
-    else:
-        print(
-            f"Error: Unsupported input file type '{os.path.splitext(input_file)[1]}'. Must be .py or .sk"
-        )
+    except Exception as e:
+        print(f"Transpilation failed: {e}")
         sys.exit(1)
+
+    if verbose:
+        print(f"Successfully wrote output to {output_file}")
