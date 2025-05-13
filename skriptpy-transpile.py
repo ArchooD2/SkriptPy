@@ -5,6 +5,12 @@ from skriptpy.core import ctx
 import re
 
 def transpile_py_to_sk(input_file, output_file):
+    """
+    Transpiles a Python script using skriptpy to a Skript language file.
+    
+    Loads the specified Python module, collects commands and events from the skriptpy context,
+    and writes their Skript representations to the output file with a generated header.
+    """
     spec = importlib.util.spec_from_file_location("script", input_file)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -17,6 +23,20 @@ def transpile_py_to_sk(input_file, output_file):
             f.write(evt.to_skript() + "\n\n")
 
 def transpile_sk_to_py(skript_code):
+    """
+    Transpiles Skript code into equivalent Python code using the skriptpy framework.
+    
+    Parses Skript source code line by line, converting recognized constructs such as
+    commands, events, control flow, and actions into Python code with appropriate
+    decorators and context managers. Maintains block structure and context stack
+    based on indentation. Returns the generated Python code as a string.
+    
+    Args:
+        skript_code: The Skript source code to transpile.
+    
+    Returns:
+        A string containing the transpiled Python code.
+    """
     lines = skript_code.splitlines()
     output = ["from skriptpy.core import *\n"]
     indent_stack = [0]
